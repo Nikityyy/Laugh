@@ -1,0 +1,41 @@
+{
+  "name": "laugh",
+  "version": "1.0.0",
+  "description": "All you need to be laughing.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prepackage": "npm run install-server",
+    "package": "electron-builder --win portable",
+    "install-server": "cd server && npm install",
+    "postinstall": "npm run install-server"
+  },
+  "keywords": [
+    "Electron",
+    "Groq",
+    "Whisper",
+    "LLM",
+    "Voice"
+  ],
+  "author": "Nikita Berger",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.4.6",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "find-free-port": "^2.0.0"
+  },
+  "build": {
+    "icon": "assets/icon.ico",
+    "asar": true,
+    "files": [
+      "**/*"
+    ],
+    "asarUnpack": [
+      "server/server.js",
+      "server/package.json"
+    ],
+    "afterPack": "./afterPack.js"
+  }
+}
