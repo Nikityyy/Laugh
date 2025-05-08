@@ -34,18 +34,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   await initializeServerUrl();
-  // add a delay to allow the backend server to be fully ready
   await new Promise(resolve => setTimeout(resolve, 1000));
   loadApiKeys();
 
   function loadApiKeys() {
     const geminiKey = localStorage.getItem("GEMINI_API_KEY") || "";
-    const groqKey = localStorage.getItem("GROQ_API_KEY") || "";
-    if (geminiKey && groqKey) {
+    if (geminiKey) {
       fetch(`${BASE_URL}/update-api-keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ geminiKey, groqKey })
+        body: JSON.stringify({ geminiKey })
       })
       .then(response => {
          if (!response.ok) {
@@ -59,7 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   window.electronAPI.onServerPort((port) => {
-    if (port) {  // modified to always update BASE_URL when a port is received
+    if (port) {
       BASE_URL = `http://localhost:${port}`;
     }
   });
@@ -181,14 +179,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (audioBlob.size === 0) {
           if (appStatus === "Processing") {
-            displayMessage(
-              "(No audio detected for the request. Please try again.)\n\n",
-              "laugh"
-            );
+        displayMessage(
+          "(No audio detected for the request. Please try again.)\n\n",
+          "laugh"
+        );
           }
           updateUIState("Listening");
           if (appStatus !== "Ready" && mediaRecorder?.state === "inactive")
-            mediaRecorder.start();
+        mediaRecorder.start();
           return;
         }
 
@@ -196,38 +194,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         formData.append("audio", audioBlob, "recording.webm");
 
         statusIndicator.innerHTML =
-          '<i class="fas fa-cog fa-spin"></i> Transcribing...';
+          '<i class="fas fa-cog fa-spin"></i> Processing Audio...';
 
         try {
-          const response = await fetch(`${BASE_URL}/transcribe`, {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const errorData = await response
-              .json()
-              .catch(() => ({ detail: "Unknown transcription error" }));
-            throw new Error(
-              errorData.detail ||
-                `Transcription failed with status: ${response.status}`
-            );
-          }
-
-          const data = await response.json();
-          const transcript = data.transcript.trim();
-
-          if (!transcript) {
-            displayMessage(
-              "(Couldn't hear anything clearly, please try again.)\n\n",
-              "laugh"
-            );
-            updateUIState("Listening");
-            if (appStatus !== "Ready" && mediaRecorder?.state === "inactive")
-              mediaRecorder.start();
-            return;
-          }
-
           updateUIState("Processing");
 
           if (currentActionType === "Ask") {
@@ -235,13 +204,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             currentConversationHistory = [];
           }
 
-          displayMessage(transcript, "user");
-          currentConversationHistory.push({
-            role: "user",
-            content: transcript,
-          });
-
-          await streamLLMResponse();
+          await streamLLMResponse(formData);
         } catch (error) {
           displayError(error.message || "Failed to process audio.");
           updateUIState("Listening");
@@ -339,22 +302,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  async function streamLLMResponse() {
-    if (!BASE_URL) {
-      displayError("Backend server URL not configured. Cannot query LLM.");
-      updateUIState("Listening");
-      return;
-    }
+  async function streamLLMResponse(formData) {
+    formData.append("conversationHistory", JSON.stringify(currentConversationHistory));
+  
     let laughResponseSpan = displayMessage("", "laugh");
     let fullLaughResponse = "";
 
     try {
       const response = await fetch(`${BASE_URL}/query-llm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationHistory: currentConversationHistory,
-        }),
+        body: formData,
       });
       if (!response.ok) {
         const errorData = await response
@@ -488,19 +445,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   updateUIState("Ready");
 
-  // SETTINGS MENU LOGIC
   const settingsButton = document.getElementById("settingsButton");
   const settingsModal = document.getElementById("settingsModal");
   const saveSettingsButton = document.getElementById("saveSettingsButton");
   const cancelSettingsButton = document.getElementById("cancelSettingsButton");
   const geminiKeyInput = document.getElementById("geminiKey");
-  const groqKeyInput = document.getElementById("groqKey");
 
-  // Open settings modal when Settings button is clicked
   settingsButton.addEventListener("click", () => {
-    // Prefill from localStorage if exists
     geminiKeyInput.value = localStorage.getItem("GEMINI_API_KEY") || "";
-    groqKeyInput.value = localStorage.getItem("GROQ_API_KEY") || "";
     settingsModal.style.opacity = "1";
     settingsModal.style.pointerEvents = "all";
   });
@@ -512,18 +464,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   saveSettingsButton.addEventListener("click", async () => {
     const geminiKey = geminiKeyInput.value.trim();
-    const groqKey = groqKeyInput.value.trim();
     localStorage.setItem("GEMINI_API_KEY", geminiKey);
-    localStorage.setItem("GROQ_API_KEY", groqKey);
-    if (!geminiKey || !groqKey) {
-      displayError("Both API keys are required.");
+    if (!geminiKey) {
+      displayError("API key is required.");
       return;
     }
     try {
       const response = await fetch(`${BASE_URL}/update-api-keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ geminiKey, groqKey }),
+        body: JSON.stringify({ geminiKey }),
       });
       if (!response.ok) throw new Error("Failed to update API keys on server.");
     } catch (error) {
